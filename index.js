@@ -21,29 +21,20 @@ const INITIAL_SESSIONS = [
   { "session_id": 11, "strand": "times_tables", "title": "Multiples of 3", "li": "To identify patterns in the 3x table.", "atoms": ["TT-2.4"], "status": "grey", "notes": "" }
 ];
 
-const STORAGE_KEY = 'maths_mastery_v6_js';
+const STORAGE_KEY = 'maths_mastery_v9';
 
-const firebaseService = {
-  getSessions: (callback) => {
+const storageManager = {
+  get: () => {
     const stored = localStorage.getItem(STORAGE_KEY);
-    const data = stored ? JSON.parse(stored) : INITIAL_SESSIONS;
-    if (!stored) localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    callback(data);
-    
-    const handleStorage = () => {
-      const current = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-      callback(current);
-    };
-    window.addEventListener('storage', handleStorage);
-    return () => window.removeEventListener('storage', handleStorage);
+    if (!stored) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_SESSIONS));
+      return INITIAL_SESSIONS;
+    }
+    return JSON.parse(stored);
   },
-  updateSession: (sessionId, strand, updates) => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (!stored) return;
-    const data = JSON.parse(stored);
-    const updated = data.map(s => (s.session_id === sessionId && s.strand === strand) ? { ...s, ...updates } : s);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-    window.dispatchEvent(new Event('storage'));
+  save: (data) => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    window.dispatchEvent(new Event('storage-update'));
   }
 };
 
@@ -51,213 +42,223 @@ const firebaseService = {
  * COMPONENTS 
  **/
 
-const SessionCard = ({ session, isExpanded, onToggle }) => {
+const SessionCard = ({ session, isExpanded, onToggle, onUpdate }) => {
   const [notes, setNotes] = useState(session.notes);
-  const [aiLoading, setAiLoading] = useState(false);
   const [aiTip, setAiTip] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
 
-  const getStatusClasses = (status) => {
+  const getStatusColor = (status) => {
     switch (status) {
-      case 'green': return 'bg-emerald-50 border-emerald-400 text-emerald-900';
-      case 'amber': return 'bg-amber-50 border-amber-400 text-amber-900';
-      default: return 'bg-slate-50 border-slate-300 text-slate-500';
+      case 'green': return 'bg-emerald-50 border-emerald-400 text-emerald-900 shadow-sm';
+      case 'amber': return 'bg-amber-50 border-amber-400 text-amber-900 shadow-sm';
+      default: return 'bg-slate-50 border-slate-200 text-slate-500 shadow-sm';
     }
   };
 
-  const updateStatus = (newStatus, e) => {
-    if (e) e.stopPropagation();
-    firebaseService.updateSession(session.session_id, session.strand, { status: newStatus });
+  const handleStatus = (status, event) => {
+    if (event) event.stopPropagation();
+    onUpdate(session.session_id, session.strand, { status });
   };
 
-  const fetchAiTip = async (e) => {
+  const askAi = async (e) => {
     e.stopPropagation();
     setAiLoading(true);
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const res = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: `Teacher Assistant: Give 2 retrieval questions for: "${session.li}". Max 40 words.`,
+        contents: `Expert Teacher: For LI "${session.li}", generate one high-quality retrieval question and one common misconception. Format clearly. Max 40 words.`,
       });
-      setAiTip(res.text || "No tips available.");
+      setAiTip(res.text);
     } catch (err) {
-      setAiTip("AI service unavailable.");
+      setAiTip("Retriever Coach is currently unavailable.");
     } finally {
       setAiLoading(false);
     }
   };
 
   return e('div', {
-    className: `border-l-4 p-5 rounded-r-xl shadow-sm transition-all duration-300 ${getStatusClasses(session.status)} ${isExpanded ? 'bg-white shadow-xl scale-[1.01] z-10' : 'hover:bg-opacity-80 cursor-pointer'}`,
+    className: `border p-5 rounded-xl transition-all duration-300 ${getStatusColor(session.status)} ${isExpanded ? 'ring-2 ring-blue-500 bg-white shadow-xl scale-[1.02] z-10' : 'hover:border-slate-300 cursor-pointer'}`,
     onClick: onToggle
   }, [
-    e('div', { key: 'header', className: 'flex justify-between items-start' }, [
-      e('div', { key: 'content', className: 'flex-1' }, [
-        e('div', { key: 'atoms', className: 'flex flex-wrap gap-1.5 mb-2' }, 
-          session.atoms.map(atom => e('span', { key: atom, className: 'text-[9px] font-black bg-slate-900 text-white px-2 py-0.5 rounded uppercase' }, atom))
+    e('div', { key: 'top', className: 'flex justify-between items-start' }, [
+      e('div', { key: 'info', className: 'flex-1' }, [
+        e('div', { key: 'atoms', className: 'flex flex-wrap gap-1 mb-2' }, 
+          session.atoms.map(a => e('span', { key: a, className: 'text-[9px] font-black bg-slate-900 text-white px-1.5 py-0.5 rounded tracking-tighter' }, a))
         ),
-        e('h3', { key: 'title', className: 'font-black text-base uppercase tracking-tight' }, session.title),
-        e('p', { key: 'li', className: `text-xs opacity-70 mt-1 ${!isExpanded ? 'line-clamp-1' : ''}` }, session.li)
+        e('h3', { key: 'title', className: 'font-black text-sm uppercase tracking-tight' }, session.title),
+        e('p', { key: 'li', className: `text-[11px] opacity-70 mt-1 ${!isExpanded ? 'line-clamp-1' : ''}` }, session.li)
       ]),
-      e('div', { key: 'actions', className: 'flex flex-col gap-2 items-end shrink-0 ml-4' }, [
-        e('div', { key: 'buttons', className: 'flex gap-1' }, [
+      e('div', { key: 'btns', className: 'flex flex-col gap-1.5 shrink-0 ml-4' }, [
+        e('div', { key: 'row1', className: 'flex gap-1' }, [
           e('button', { 
-            key: 'taught', 
-            onClick: (e) => updateStatus('amber', e),
-            className: 'text-[8px] font-black px-2 py-1 bg-amber-200 hover:bg-amber-300 rounded border border-amber-400/30 uppercase text-amber-900'
+            key: 'amber', 
+            onClick: (e) => handleStatus('amber', e),
+            className: 'text-[9px] font-black px-2 py-1 bg-amber-400 text-amber-950 rounded uppercase transition-transform active:scale-95'
           }, 'Taught'),
           e('button', { 
-            key: 'master', 
-            onClick: (e) => updateStatus('green', e),
-            className: 'text-[8px] font-black px-2 py-1 bg-emerald-200 hover:bg-emerald-300 rounded border border-emerald-400/30 uppercase text-emerald-900'
-          }, 'Master')
+            key: 'green', 
+            onClick: (e) => handleStatus('green', e),
+            className: 'text-[9px] font-black px-2 py-1 bg-emerald-500 text-white rounded uppercase transition-transform active:scale-95'
+          }, 'Mastered')
         ]),
-        e('span', { key: 'id', className: 'text-[10px] font-bold opacity-30' }, `ID: ${session.session_id}`)
+        e('span', { key: 'sid', className: 'text-[9px] font-bold opacity-30 text-right' }, `#${session.session_id}`)
       ])
     ]),
-    
-    isExpanded && e('div', { key: 'editor', className: 'mt-6 pt-6 border-t border-slate-200 space-y-5', onClick: e => e.stopPropagation() }, [
-      e('div', { key: 'controls', className: 'grid grid-cols-2 gap-4' }, [
+
+    isExpanded && e('div', { key: 'body', className: 'mt-6 pt-6 border-t border-slate-200 space-y-5', onClick: ev => ev.stopPropagation() }, [
+      e('div', { key: 'actions', className: 'grid grid-cols-2 gap-3' }, [
         e('button', { 
-          key: 'reset',
-          onClick: () => updateStatus('grey'),
-          className: 'text-[10px] font-black bg-slate-200 p-2.5 rounded uppercase tracking-widest text-slate-600 hover:bg-slate-300 transition-colors'
-        }, 'Reset Status'),
+          key: 'undo',
+          onClick: (e) => handleStatus('grey', e),
+          className: 'text-[10px] font-black bg-slate-200 hover:bg-slate-300 p-2.5 rounded uppercase tracking-widest text-slate-700 flex items-center justify-center gap-2'
+        }, [
+          e('svg', { key: 'icon', className: 'w-3 h-3', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, e('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2, d: 'M10 19l-7-7m0 0l7-7m-7 7h18' })),
+          'Reset Status'
+        ]),
         e('button', { 
-          key: 'ai',
-          onClick: fetchAiTip,
+          key: 'ai-btn',
+          onClick: askAi,
           disabled: aiLoading,
-          className: 'text-[10px] font-black bg-blue-600 p-2.5 rounded uppercase tracking-widest text-white hover:bg-blue-700 transition-colors disabled:opacity-50'
-        }, aiLoading ? 'Asking...' : 'AI Prompts')
-      ]),
-      
-      aiTip && e('div', { key: 'ai-tip', className: 'p-4 bg-blue-50 border border-blue-100 rounded-lg text-[11px] text-blue-900 leading-relaxed' }, [
-        e('h5', { className: 'font-black uppercase tracking-widest mb-1 flex items-center gap-1' }, '✨ Coach Suggestion'),
-        e('p', { className: 'italic' }, aiTip)
+          className: 'text-[10px] font-black bg-blue-600 hover:bg-blue-700 p-2.5 rounded uppercase tracking-widest text-white disabled:opacity-50 flex items-center justify-center gap-2'
+        }, [
+          e('svg', { key: 'icon', className: 'w-3 h-3', fill: 'currentColor', viewBox: '0 0 20 20' }, e('path', { d: 'M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 015.25-2.906z' })),
+          aiLoading ? 'Thinking...' : 'Retrieval Coach'
+        ])
       ]),
 
-      e('div', { key: 'notes-area', className: 'space-y-1.5' }, [
+      aiTip && e('div', { key: 'tip', className: 'p-4 bg-blue-50 border border-blue-100 rounded-lg text-[11px] text-blue-950 leading-relaxed' }, [
+        e('span', { className: 'block font-black uppercase text-[9px] tracking-widest text-blue-400 mb-2' }, 'Suggested Retrieval Focus'),
+        e('p', { className: 'italic font-medium' }, aiTip)
+      ]),
+
+      e('div', { key: 'note-box', className: 'space-y-1' }, [
         e('label', { className: 'text-[10px] font-black uppercase tracking-widest text-slate-400' }, 'Teacher Reflection'),
         e('textarea', {
           value: notes,
           onChange: (ev) => {
             setNotes(ev.target.value);
-            firebaseService.updateSession(session.session_id, session.strand, { notes: ev.target.value });
+            onUpdate(session.session_id, session.strand, { notes: ev.target.value });
           },
-          placeholder: 'Record student focus groups or lesson adjustments...',
-          className: 'w-full h-32 text-[11px] p-4 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-none shadow-inner'
+          placeholder: 'Record student progress or focus groups...',
+          className: 'w-full h-32 text-[11px] p-4 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-none'
         })
       ])
     ])
   ]);
 };
 
-const Timeline = ({ title, sessions }) => {
-  const [expandedId, setExpandedId] = useState(null);
+const Timeline = ({ title, sessions, onUpdate }) => {
+  const [activeId, setActiveId] = useState(null);
 
-  return e('div', { className: 'bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-full' }, [
-    e('div', { key: 'header', className: 'bg-slate-900 text-white px-6 py-4 flex justify-between items-center' }, [
-      e('h2', { className: 'font-black uppercase tracking-tighter text-sm' }, title),
-      e('span', { className: 'text-[10px] font-black bg-white/10 px-3 py-1 rounded-full border border-white/20' }, `${sessions.length} Lessons`)
+  return e('div', { className: 'flex flex-col h-full' }, [
+    // STRAND HEADING
+    e('div', { key: 'heading', className: 'mb-6' }, [
+      e('h2', { className: 'text-2xl font-black uppercase tracking-tighter text-slate-900 leading-none mb-1' }, title),
+      e('div', { className: 'h-1.5 w-12 bg-blue-600 rounded-full' })
     ]),
-    e('div', { key: 'body', className: 'p-6 md:p-8 bg-slate-50/30 flex-1 relative overflow-y-auto' }, [
-      e('div', { key: 'line', className: 'absolute left-[39px] md:left-[47px] top-0 bottom-0 w-1 bg-slate-200' }),
-      e('div', { key: 'items', className: 'space-y-10 relative' }, 
-        sessions.sort((a,b) => a.session_id - b.session_id).map(session => {
-          const key = `${session.strand}-${session.session_id}`;
-          return e('div', { key, className: 'pl-14 md:pl-16 relative' }, [
-            e('div', { 
-              key: 'indicator',
-              className: `absolute left-[-16px] md:left-[-12px] top-5 w-8 h-8 rounded-full border-4 border-white shadow-md z-10 flex items-center justify-center transition-colors ${
-                session.status === 'green' ? 'bg-emerald-500' : 
-                session.status === 'amber' ? 'bg-amber-500' : 'bg-slate-300'
-              }`
-            }, session.status === 'green' ? e('svg', { className: 'w-4 h-4 text-white', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, e('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 3, d: 'M5 13l4 4L19 7' })) : null),
-            e(SessionCard, {
-              session,
-              isExpanded: expandedId === key,
-              onToggle: () => setExpandedId(expandedId === key ? null : key)
-            })
-          ]);
-        })
-      )
+    
+    e('div', { key: 'container', className: 'bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col flex-1' }, [
+      e('div', { key: 'stats', className: 'bg-slate-50 px-6 py-3 border-b border-slate-100 flex justify-between items-center' }, [
+        e('span', { className: 'text-[10px] font-black uppercase tracking-widest text-slate-400' }, 'Sequence Progression'),
+        e('span', { className: 'text-[10px] font-black bg-slate-200 px-2.5 py-1 rounded-full text-slate-600' }, `${sessions.length} Sessions`)
+      ]),
+      
+      e('div', { key: 'b', className: 'p-6 md:p-10 flex-1 relative overflow-y-auto' }, [
+        e('div', { key: 'line', className: 'absolute left-[39px] md:left-[51px] top-0 bottom-0 w-1 bg-slate-100 border-l border-dashed border-slate-300' }),
+        e('div', { key: 'stack', className: 'space-y-12 relative' }, 
+          sessions.sort((a,b) => a.session_id - b.session_id).map(s => {
+            const key = `${s.strand}-${s.session_id}`;
+            return e('div', { key, className: 'pl-14 md:pl-16 relative' }, [
+              e('div', { 
+                key: 'dot',
+                className: `absolute left-[-16px] md:left-[-12px] top-5 w-8 h-8 rounded-full border-4 border-white shadow-md z-10 flex items-center justify-center transition-colors duration-500 ${
+                  s.status === 'green' ? 'bg-emerald-500' : s.status === 'amber' ? 'bg-amber-500' : 'bg-slate-300'
+                }`
+              }, s.status === 'green' ? e('svg', { className: 'w-4 h-4 text-white', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, e('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 3, d: 'M5 13l4 4L19 7' })) : null),
+              e(SessionCard, {
+                session: s,
+                isExpanded: activeId === key,
+                onToggle: () => setActiveId(activeId === key ? null : key),
+                onUpdate
+              })
+            ]);
+          })
+        )
+      ])
     ])
   ]);
 };
 
 const App = () => {
   const [sessions, setSessions] = useState([]);
-  const [relieverMode, setRelieverMode] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [reliever, setReliever] = useState(false);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    return firebaseService.getSessions((data) => {
-      setSessions(data);
-      setLoading(false);
-    });
+    setSessions(storageManager.get());
+    setReady(true);
+    const refresh = () => setSessions(storageManager.get());
+    window.addEventListener('storage-update', refresh);
+    return () => window.removeEventListener('storage-update', refresh);
   }, []);
 
-  const filteredSessions = useMemo(() => {
-    if (!relieverMode) return sessions;
-    const result = [];
-    ['place_value', 'times_tables'].forEach(strand => {
-      const strandLessons = sessions.filter(s => s.strand === strand).sort((a, b) => a.session_id - b.session_id);
+  const handleUpdate = (sid, strand, updates) => {
+    const data = storageManager.get();
+    const next = data.map(s => (s.session_id === sid && s.strand === strand) ? { ...s, ...updates } : s);
+    storageManager.save(next);
+  };
+
+  const filtered = useMemo(() => {
+    if (!reliever) return sessions;
+    return ['place_value', 'times_tables'].flatMap(st => {
+      const strandLessons = sessions.filter(s => s.strand === st).sort((a, b) => a.session_id - b.session_id);
       const next = strandLessons.find(s => s.status !== 'green');
-      if (next) result.push(next);
+      return next ? [next] : [];
     });
-    return result;
-  }, [sessions, relieverMode]);
+  }, [sessions, reliever]);
 
-  if (loading) return e('div', { className: 'min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white font-mono p-10' }, [
-    e('div', { className: 'w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-6' }),
-    e('p', { className: 'uppercase tracking-[0.3em] font-black text-xs' }, 'Syncing Lessons...')
-  ]);
+  if (!ready) return e('div', { className: 'flex items-center justify-center min-h-screen bg-slate-50' }, 
+    e('div', { className: 'animate-pulse font-black text-slate-300 tracking-[0.5em]' }, 'LOADING ENGINE')
+  );
 
-  return e('div', { className: 'min-h-screen bg-[#f8fafc] flex flex-col font-sans antialiased text-slate-900' }, [
-    e('header', { className: 'bg-white/95 backdrop-blur-md border-b border-slate-200 sticky top-0 z-50' }, [
-      e('div', { className: 'max-w-7xl mx-auto px-4 sm:px-6 h-20 flex items-center justify-between' }, [
+  return e('div', { className: 'min-h-screen bg-[#f8fafc] flex flex-col font-sans selection:bg-blue-100 selection:text-blue-900' }, [
+    e('header', { className: 'bg-white border-b border-slate-200 sticky top-0 z-50 py-4 shadow-sm' }, [
+      e('div', { className: 'max-w-7xl mx-auto px-6 flex justify-between items-center' }, [
         e('div', { className: 'flex items-center gap-4' }, [
-          e('div', { className: 'bg-slate-900 p-2.5 rounded-2xl text-white shadow-xl shadow-blue-500/20' }, 
-            e('svg', { className: 'w-6 h-6', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, e('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2.5, d: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012-2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z' }))
+          e('div', { className: 'bg-blue-600 text-white p-2 rounded-xl' }, 
+            e('svg', { className: 'w-6 h-6', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, e('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2.5, d: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6' }))
           ),
           e('div', null, [
-            e('h1', { className: 'font-black text-xl tracking-tighter leading-none' }, 'MASTERY TRACKER'),
-            e('p', { className: 'text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1' }, 'Classroom Engine v3.0')
+            e('h1', { className: 'font-black text-xl tracking-tighter uppercase' }, 'Mastery Engine'),
+            e('p', { className: 'text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]' }, 'Planning & Retrieval Terminal')
           ])
         ]),
-        e('div', { 
-          className: `flex items-center gap-4 border p-2 rounded-2xl px-5 transition-all ${relieverMode ? 'bg-blue-600 border-blue-700 text-white shadow-lg' : 'bg-white border-slate-200'}`
-        }, [
-          e('span', { className: `text-[10px] font-black uppercase tracking-widest ${relieverMode ? 'text-white' : 'text-slate-400'}` }, 'Reliever Mode'),
+        e('div', { className: 'flex items-center gap-6' }, [
+          e('div', { className: 'hidden md:flex gap-4 text-[9px] font-black uppercase tracking-widest text-slate-400' }, [
+             e('span', { className: 'flex items-center gap-1.5' }, [e('div', { className: 'w-2 h-2 rounded-full bg-slate-300' }), 'Untaught']),
+             e('span', { className: 'flex items-center gap-1.5' }, [e('div', { className: 'w-2 h-2 rounded-full bg-amber-400' }), 'Taught']),
+             e('span', { className: 'flex items-center gap-1.5' }, [e('div', { className: 'w-2 h-2 rounded-full bg-emerald-500' }), 'Mastered'])
+          ]),
           e('button', { 
-            onClick: () => setRelieverMode(!relieverMode),
-            className: `w-12 h-6 rounded-full transition-all relative ${relieverMode ? 'bg-white/20 ring-1 ring-white/50' : 'bg-slate-300'}`
-          }, e('div', { className: `absolute top-1 left-1 w-4 h-4 rounded-full transition-transform shadow-sm ${relieverMode ? 'translate-x-6 bg-white' : 'bg-white'}` }))
+            onClick: () => setReliever(!reliever),
+            className: `text-[10px] font-black px-5 py-2.5 rounded-full border transition-all shadow-sm flex items-center gap-2 ${reliever ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`
+          }, [
+            e('div', { className: `w-2 h-2 rounded-full ${reliever ? 'bg-white' : 'bg-slate-300'}` }),
+            reliever ? 'Reliever: Next Sessions Only' : 'Full Dashboard View'
+          ])
         ])
       ])
     ]),
 
-    e('main', { className: 'max-w-7xl mx-auto w-full flex-1 p-6 md:p-8 space-y-8' }, [
-      e('div', { className: 'flex flex-col md:flex-row justify-between items-end gap-6' }, [
-        e('h2', { className: 'text-3xl font-black tracking-tight uppercase leading-none' }, relieverMode ? "Today's Focus Points" : "Sequence Overview"),
-        e('div', { className: 'flex gap-4 text-[9px] font-black uppercase tracking-widest bg-white p-3 rounded-xl border border-slate-200' }, [
-          e('span', { className: 'flex items-center gap-1.5' }, [e('div', { className: 'w-2.5 h-2.5 rounded-full bg-slate-300' }), 'Not Taught']),
-          e('span', { className: 'flex items-center gap-1.5' }, [e('div', { className: 'w-2.5 h-2.5 rounded-full bg-amber-400' }), 'Taught / Repeat']),
-          e('span', { className: 'flex items-center gap-1.5' }, [e('div', { className: 'w-2.5 h-2.5 rounded-full bg-emerald-500' }), 'Mastered'])
-        ])
-      ]),
-
-      e('div', { className: 'grid grid-cols-1 lg:grid-cols-2 gap-8' }, [
-        e(Timeline, { strandName: 'Place Value', sessions: filteredSessions.filter(s => s.strand === 'place_value') }),
-        e(Timeline, { strandName: 'Times Tables', sessions: filteredSessions.filter(s => s.strand === 'times_tables') })
+    e('main', { className: 'max-w-7xl mx-auto w-full flex-1 p-6 md:p-10' }, [
+      e('div', { className: 'grid grid-cols-1 lg:grid-cols-2 gap-12' }, [
+        e(Timeline, { title: 'Place Value', sessions: filtered.filter(s => s.strand === 'place_value'), onUpdate: handleUpdate }),
+        e(Timeline, { title: 'Times Tables', sessions: filtered.filter(s => s.strand === 'times_tables'), onUpdate: handleUpdate })
       ])
     ]),
 
-    e('footer', { className: 'bg-white border-t border-slate-200 p-10 mt-10' }, [
-      e('div', { className: 'max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4 text-[10px] font-black text-slate-400 tracking-widest uppercase' }, [
-        e('p', null, `© ${new Date().getFullYear()} Mastery Engine • Side-by-Side Planning`),
-        e('p', null, 'Intelligent Assistance via Google Gemini')
-      ])
-    ])
+    e('footer', { className: 'p-12 text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] text-center border-t border-slate-200 bg-white mt-auto' }, 'Mastery Engine • Designed for Dynamic Classrooms')
   ]);
 };
 

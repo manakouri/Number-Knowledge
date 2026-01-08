@@ -9,9 +9,7 @@
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
       body { font-family: 'Inter', sans-serif; }
-      /* Custom styles for animations that are hard to do in pure Tailwind without plugins */
-      .expand-enter { max-height: 0; opacity: 0; overflow: hidden; }
-      .expand-enter-active { max-height: 1000px; opacity: 1; transition: all 300ms ease-out; }
+      .line-clamp-1 { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
     </style>
     <script type="importmap">
 {
