@@ -1,0 +1,5 @@
+{
+  "name": "Maths Mastery Dashboard",
+  "description": "A comprehensive teacher dashboard for tracking student progress across 'Place Value' and 'Times Tables' strands, featuring vertical timelines, status tracking, and AI-assisted teaching notes.",
+  "requestFramePermissions": []
+}
