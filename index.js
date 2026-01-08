@@ -1,1 +1,1 @@
-// Deprecated: Logic moved to index.tsx
+// Logic moved back to index.tsx

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import ReactDOM from 'react-dom/client';
 import { GoogleGenAI } from "@google/genai";
@@ -52,7 +51,6 @@ const DatabaseSeeder = () => {
 
       // Seed Sessions
       for (const session of master_sessions) {
-        // Use a composite ID to ensure uniqueness across strands
         const sessionId = `${session.strand}-${session.session_id}`;
         const sessionRef = doc(db, "sessions", sessionId);
         await setDoc(sessionRef, session);
@@ -91,9 +89,9 @@ const DatabaseSeeder = () => {
   );
 };
 
-const SessionCard = ({ session, isExpanded, onToggle }: { session: any, isExpanded: boolean, onToggle: () => void }) => {
+const SessionCard = ({ session, isExpanded, onToggle }) => {
   const [localNotes, setLocalNotes] = useState(session.notes || '');
-  const [aiTip, setAiTip] = useState<string | null>(null);
+  const [aiTip, setAiTip] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
 
   useEffect(() => {
@@ -102,7 +100,7 @@ const SessionCard = ({ session, isExpanded, onToggle }: { session: any, isExpand
 
   const linkedAtoms = master_atoms.filter(a => session.atoms.includes(a.atom_id));
 
-  const getStatusStyles = (status: string) => {
+  const getStatusStyles = (status) => {
     switch (status) {
       case 'green': return 'bg-emerald-50 border-emerald-400 text-emerald-900 shadow-emerald-100';
       case 'amber': return 'bg-amber-50 border-amber-400 text-amber-900 shadow-amber-100';
@@ -110,7 +108,7 @@ const SessionCard = ({ session, isExpanded, onToggle }: { session: any, isExpand
     }
   };
 
-  const updateSession = async (updates: any) => {
+  const updateSession = async (updates) => {
     try {
       const sessionId = `${session.strand}-${session.session_id}`;
       const sessionRef = doc(db, "sessions", sessionId);
@@ -120,23 +118,21 @@ const SessionCard = ({ session, isExpanded, onToggle }: { session: any, isExpand
     }
   };
 
-  const handleStatus = (newStatus: string, event: React.MouseEvent) => {
+  const handleStatus = (newStatus, event) => {
     if (event) event.stopPropagation();
     updateSession({ status: newStatus });
   };
 
-  const askAi = async (e: React.MouseEvent) => {
+  const askAi = async (e) => {
     e.stopPropagation();
     setAiLoading(true);
     try {
-      // Corrected: Initialization using the recommended pattern and directly using process.env.API_KEY
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const context = linkedAtoms.map(a => `${a.title}: ${a.description}`).join('; ');
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: `Expert Maths Coach: Focus on session "${session.title}" (${session.li}). Atoms: ${context}. Suggest one specific task or question to check for the misconceptions: ${linkedAtoms.flatMap(a => a.misconceptions).join(', ')}. Keep it under 30 words.`,
       });
-      // Corrected: accessing .text property instead of method
       setAiTip(response.text || "No coaching tips found.");
     } catch (err) {
       console.error("Gemini Error:", err);
@@ -154,7 +150,7 @@ const SessionCard = ({ session, isExpanded, onToggle }: { session: any, isExpand
       <div className="flex justify-between items-start">
         <div className="flex-1 pr-4">
           <div className="flex flex-wrap gap-1.5 mb-3">
-            {session.atoms.map((id: string) => (
+            {session.atoms.map((id) => (
               <span key={id} className="text-[9px] font-black bg-slate-800 text-white px-2 py-0.5 rounded-md tracking-tighter uppercase">{id}</span>
             ))}
           </div>
@@ -239,8 +235,8 @@ const SessionCard = ({ session, isExpanded, onToggle }: { session: any, isExpand
   );
 };
 
-const Timeline = ({ title, sessions }: { title: string, sessions: any[] }) => {
-  const [activeId, setActiveId] = useState<string | null>(null);
+const Timeline = ({ title, sessions }) => {
+  const [activeId, setActiveId] = useState(null);
 
   return (
     <div className="flex flex-col h-full">
@@ -258,7 +254,7 @@ const Timeline = ({ title, sessions }: { title: string, sessions: any[] }) => {
         <div className="p-8 md:p-12 flex-1 relative overflow-y-auto max-h-[70vh]">
           <div className="absolute left-[45px] md:left-[57px] top-0 bottom-0 w-[2px] bg-slate-100"></div>
           <div className="space-y-14 relative">
-            {sessions.sort((a: any, b: any) => a.session_id - b.session_id).map((s: any) => {
+            {sessions.sort((a, b) => a.session_id - b.session_id).map((s) => {
               const id = `${s.strand}-${s.session_id}`;
               return (
                 <div key={id} className="pl-16 md:pl-20 relative">
@@ -267,7 +263,6 @@ const Timeline = ({ title, sessions }: { title: string, sessions: any[] }) => {
                       s.status === 'green' ? 'bg-emerald-500' : s.status === 'amber' ? 'bg-amber-500' : 'bg-slate-200'
                     }`}
                   ></div>
-                  {/* Fixed typo in SessionCard props: session: s -> session={s}, and corrected object-like syntax */}
                   <SessionCard
                     session={s}
                     isExpanded={activeId === id}
@@ -284,12 +279,11 @@ const Timeline = ({ title, sessions }: { title: string, sessions: any[] }) => {
 };
 
 const App = () => {
-  const [sessions, setSessions] = useState<any[]>([]);
+  const [sessions, setSessions] = useState([]);
   const [relieverMode, setRelieverMode] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
-    // Only fetch data. Seeding is now handled by the manual button or initial check.
     const unsub = onSnapshot(collection(db, "sessions"), (snapshot) => {
       setSessions(snapshot.docs.map(d => d.data()));
       setIsLoaded(true);
