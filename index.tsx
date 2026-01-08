@@ -29,9 +29,6 @@ const db = getFirestore(app);
 
 // --- Components ---
 
-/**
- * Seeder Component for populating Firestore
- */
 const DatabaseSeeder = () => {
   const [seeding, setSeeding] = useState(false);
   const [message, setMessage] = useState('');
@@ -357,7 +354,6 @@ const App = () => {
   );
 };
 
-// Mount the app
 const container = document.getElementById('root');
 if (container) {
   const root = ReactDOM.createRoot(container);
